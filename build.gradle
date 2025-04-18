@@ -27,6 +27,8 @@ dependencies {
 	testRuntimeOnly 'org.junit.platform:junit-platform-launcher'
 	//swagger-page
 	implementation 'org.springdoc:springdoc-openapi-starter-webmvc-ui:2.8.4'
+	//dev-tool
+	compileOnly 'org.springframework.boot:spring-boot-devtools'
 }
 
 tasks.named('test') {
