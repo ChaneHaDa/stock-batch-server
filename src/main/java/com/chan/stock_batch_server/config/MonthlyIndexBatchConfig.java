@@ -1,7 +1,7 @@
 package com.chan.stock_batch_server.config;
 
+import com.chan.stock_batch_server.dto.MonthlyPrice;
 import com.chan.stock_batch_server.model.CalcIndexPrice;
-import com.chan.stock_batch_server.model.IndexInfo;
 import jakarta.persistence.EntityManagerFactory;
 import org.springframework.batch.core.Job;
 import org.springframework.batch.core.Step;
@@ -29,31 +29,6 @@ import java.util.Map;
 public class MonthlyIndexBatchConfig {
 
     /**
-     * 월별 가격 집계를 위한 DTO
-     */
-    public static class MonthlyPrice {
-        private final Integer year;
-        private final Integer month;
-        private final Double openPrice;
-        private final Double closePrice;
-        private final IndexInfo indexInfo;
-
-        public MonthlyPrice(Integer year, Integer month, Double openPrice, Double closePrice, IndexInfo indexInfo) {
-            this.year = year;
-            this.month = month;
-            this.openPrice = openPrice;
-            this.closePrice = closePrice;
-            this.indexInfo = indexInfo;
-        }
-
-        public Integer getYear() { return year; }
-        public Integer getMonth() { return month; }
-        public Double getOpenPrice() { return openPrice; }
-        public Double getClosePrice() { return closePrice; }
-        public IndexInfo getIndexInfo() { return indexInfo; }
-    }
-
-    /**
      * JobParameters로 받은 연도(year)와 월(month)에 해당하는 월별 시가·종가 집계 Reader
      */
     @Bean
@@ -64,15 +39,40 @@ public class MonthlyIndexBatchConfig {
             @Value("#{jobParameters['month']}") Integer month
     ) {
         String jpql = """
-            SELECT new com.chan.stock_batch_server.config.MonthlyIndexBatchConfig.MonthlyPrice(
+            SELECT new com.chan.stock_batch_server.dto.MonthlyPrice(
                 YEAR(p.baseDate),
                 MONTH(p.baseDate),
-                MIN(p.openPrice),
-                MAX(p.closePrice),
+                (SELECT p2.closePrice
+                 FROM IndexPrice p2
+                 WHERE p2.indexInfo = p.indexInfo
+                   AND YEAR(p2.baseDate) = :year
+                   AND MONTH(p2.baseDate) = :month
+                   AND p2.baseDate = (
+                       SELECT MIN(p3.baseDate)
+                       FROM IndexPrice p3
+                       WHERE p3.indexInfo = p.indexInfo
+                         AND YEAR(p3.baseDate) = :year
+                         AND MONTH(p3.baseDate) = :month
+                   )
+                ),
+                (SELECT p2.closePrice
+                 FROM IndexPrice p2
+                 WHERE p2.indexInfo = p.indexInfo
+                   AND YEAR(p2.baseDate) = :year
+                   AND MONTH(p2.baseDate) = :month
+                   AND p2.baseDate = (
+                       SELECT MAX(p3.baseDate)
+                       FROM IndexPrice p3
+                       WHERE p3.indexInfo = p.indexInfo
+                         AND YEAR(p3.baseDate) = :year
+                         AND MONTH(p3.baseDate) = :month
+                   )
+                ),
+                AVG(p.closePrice),
                 p.indexInfo
             )
             FROM IndexPrice p
-            WHERE YEAR(p.baseDate) = :year
+            WHERE YEAR(p.baseDate)  = :year
               AND MONTH(p.baseDate) = :month
             GROUP BY p.indexInfo, YEAR(p.baseDate), MONTH(p.baseDate)
             ORDER BY p.indexInfo.id, YEAR(p.baseDate), MONTH(p.baseDate)
@@ -92,10 +92,10 @@ public class MonthlyIndexBatchConfig {
     @Bean
     public ItemProcessor<MonthlyPrice, CalcIndexPrice> monthlyPriceProcessor() {
         return monthly -> {
-            float ror = (float) ((monthly.getClosePrice() - monthly.getOpenPrice()) / monthly.getOpenPrice());
+            float ror = (float) ((monthly.getEndPrice() - monthly.getStartPrice()) / monthly.getStartPrice());
             LocalDate baseDate = LocalDate.of(monthly.getYear(), monthly.getMonth(), 1);
             return CalcIndexPrice.builder()
-                    .price((int) Math.round(monthly.getClosePrice()))
+                    .price(monthly.getAveragePrice().floatValue())
                     .monthlyRor(ror)
                     .baseDate(baseDate)
                     .indexInfo(monthly.getIndexInfo())
