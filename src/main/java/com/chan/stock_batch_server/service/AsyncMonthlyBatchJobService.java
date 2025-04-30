@@ -15,11 +15,11 @@ import java.time.YearMonth;
 @Service
 public class AsyncMonthlyBatchJobService {
     private final JobLauncher jobLauncher;
-    private final Job calcPriceJob;
+    private final Job calcIndexPriceJob;
 
-    public AsyncMonthlyBatchJobService(JobLauncher jobLauncher, @Qualifier("calcPriceJob") Job calcPriceJob) {
+    public AsyncMonthlyBatchJobService(JobLauncher jobLauncher, @Qualifier("calcIndexPriceJob") Job calcIndexPriceJob) {
         this.jobLauncher = jobLauncher;
-        this.calcPriceJob = calcPriceJob;
+        this.calcIndexPriceJob = calcIndexPriceJob;
     }
 
     @Async
@@ -30,7 +30,7 @@ public class AsyncMonthlyBatchJobService {
                 .addLong("timestamp", System.currentTimeMillis())
                 .toJobParameters();
 
-        JobExecution execution = jobLauncher.run(calcPriceJob, params);
+        JobExecution execution = jobLauncher.run(calcIndexPriceJob, params);
     }
 
     @Async
@@ -45,7 +45,7 @@ public class AsyncMonthlyBatchJobService {
                     .addLong("timestamp", System.currentTimeMillis())
                     .toJobParameters();
 
-            jobLauncher.run(calcPriceJob, params);
+            jobLauncher.run(calcIndexPriceJob, params);
         }
     }
 }

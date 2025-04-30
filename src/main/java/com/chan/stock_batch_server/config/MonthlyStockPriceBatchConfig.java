@@ -1,7 +1,9 @@
 package com.chan.stock_batch_server.config;
 
-import com.chan.stock_batch_server.dto.MonthlyPrice;
+import com.chan.stock_batch_server.dto.MonthlyIndexPrice;
+import com.chan.stock_batch_server.dto.MonthlyStockPrice;
 import com.chan.stock_batch_server.model.CalcIndexPrice;
+import com.chan.stock_batch_server.model.CalcStockPrice;
 import jakarta.persistence.EntityManagerFactory;
 import org.springframework.batch.core.Job;
 import org.springframework.batch.core.Step;
@@ -32,51 +34,51 @@ public class MonthlyStockPriceBatchConfig {
      */
     @Bean
     @StepScope
-    public JpaPagingItemReader<MonthlyPrice> monthlyPriceReader(
+    public JpaPagingItemReader<MonthlyStockPrice> monthlyStockPriceReader(
             EntityManagerFactory emf,
             @Value("#{jobParameters['year']}") Integer year,
             @Value("#{jobParameters['month']}") Integer month
     ) {
         String jpql = """
-            SELECT new com.chan.stock_batch_server.dto.MonthlyPrice(
+            SELECT new com.chan.stock_batch_server.dto.MonthlyStockPrice(
                 YEAR(p.baseDate),
                 MONTH(p.baseDate),
                 (SELECT p2.closePrice
-                 FROM IndexPrice p2
-                 WHERE p2.indexInfo = p.indexInfo
+                 FROM StockPrice p2
+                 WHERE p2.stock = p.stock
                    AND YEAR(p2.baseDate) = :year
                    AND MONTH(p2.baseDate) = :month
                    AND p2.baseDate = (
                        SELECT MIN(p3.baseDate)
-                       FROM IndexPrice p3
-                       WHERE p3.indexInfo = p.indexInfo
+                       FROM StockPrice p3
+                       WHERE p3.stock = p.stock
                          AND YEAR(p3.baseDate) = :year
                          AND MONTH(p3.baseDate) = :month
                    )
                 ),
                 (SELECT p2.closePrice
-                 FROM IndexPrice p2
-                 WHERE p2.indexInfo = p.indexInfo
+                 FROM StockPrice p2
+                 WHERE p2.stock = p.stock
                    AND YEAR(p2.baseDate) = :year
                    AND MONTH(p2.baseDate) = :month
                    AND p2.baseDate = (
                        SELECT MAX(p3.baseDate)
-                       FROM IndexPrice p3
-                       WHERE p3.indexInfo = p.indexInfo
+                       FROM StockPrice p3
+                       WHERE p3.stock = p.stock
                          AND YEAR(p3.baseDate) = :year
                          AND MONTH(p3.baseDate) = :month
                    )
                 ),
                 AVG(p.closePrice),
-                p.indexInfo
+                p.stock
             )
-            FROM IndexPrice p
+            FROM StockPrice p
             WHERE YEAR(p.baseDate)  = :year
               AND MONTH(p.baseDate) = :month
-            GROUP BY p.indexInfo, YEAR(p.baseDate), MONTH(p.baseDate)
-            ORDER BY p.indexInfo.id, YEAR(p.baseDate), MONTH(p.baseDate)
+            GROUP BY p.stock, YEAR(p.baseDate), MONTH(p.baseDate)
+            ORDER BY p.stock.id, YEAR(p.baseDate), MONTH(p.baseDate)
         """;
-        return new JpaPagingItemReaderBuilder<MonthlyPrice>()
+        return new JpaPagingItemReaderBuilder<MonthlyStockPrice>()
                 .name("monthlyPriceReader")
                 .entityManagerFactory(emf)
                 .queryString(jpql)
@@ -86,28 +88,28 @@ public class MonthlyStockPriceBatchConfig {
     }
 
     /**
-     * 월별 수익률을 계산하여 CalcIndexPrice 객체 생성
+     * 월별 수익률을 계산하여 CalcStockPrice 객체 생성
      */
     @Bean
-    public ItemProcessor<MonthlyPrice, CalcIndexPrice> monthlyPriceProcessor() {
+    public ItemProcessor<MonthlyStockPrice, CalcStockPrice> monthlyStockPriceProcessor() {
         return monthly -> {
             float ror = (float) ((monthly.getEndPrice() - monthly.getStartPrice()) / monthly.getStartPrice());
             LocalDate baseDate = LocalDate.of(monthly.getYear(), monthly.getMonth(), 1);
-            return CalcIndexPrice.builder()
+            return CalcStockPrice.builder()
                     .price(monthly.getAveragePrice().floatValue())
                     .monthlyRor(ror)
                     .baseDate(baseDate)
-                    .indexInfo(monthly.getIndexInfo())
+                    .stock(monthly.getStock())
                     .build();
         };
     }
 
     /**
-     * CalcIndexPrice 저장을 위한 JPA Writer
+     * CalcStockPrice 저장을 위한 JPA Writer
      */
     @Bean
-    public JpaItemWriter<CalcIndexPrice> calcPriceWriter(EntityManagerFactory emf) {
-        JpaItemWriter<CalcIndexPrice> writer = new JpaItemWriter<>();
+    public JpaItemWriter<CalcStockPrice> calcStockPriceWriter(EntityManagerFactory emf) {
+        JpaItemWriter<CalcStockPrice> writer = new JpaItemWriter<>();
         writer.setEntityManagerFactory(emf);
         return writer;
     }
@@ -116,15 +118,15 @@ public class MonthlyStockPriceBatchConfig {
      * Step 구성: Reader, Processor, Writer를 100건 단위 청크로 묶음
      */
     @Bean
-    public Step calcPriceStep(
+    public Step calcStockPriceStep(
             JobRepository jobRepository,
             PlatformTransactionManager txMgr,
-            JpaPagingItemReader<MonthlyPrice> reader,
-            ItemProcessor<MonthlyPrice, CalcIndexPrice> processor,
-            JpaItemWriter<CalcIndexPrice> writer
+            JpaPagingItemReader<MonthlyStockPrice> reader,
+            ItemProcessor<MonthlyStockPrice, CalcStockPrice> processor,
+            JpaItemWriter<CalcStockPrice> writer
     ) {
-        return new StepBuilder("calcPriceStep", jobRepository)
-                .<MonthlyPrice, CalcIndexPrice>chunk(100, txMgr)
+        return new StepBuilder("calcStockPriceStep", jobRepository)
+                .<MonthlyStockPrice, CalcStockPrice>chunk(100, txMgr)
                 .reader(reader)
                 .processor(processor)
                 .writer(writer)
@@ -135,9 +137,9 @@ public class MonthlyStockPriceBatchConfig {
      * Job 구성: 하나의 Step으로 실행
      */
     @Bean
-    public Job calcPriceJob(JobRepository jobRepository, Step calcPriceStep) {
-        return new JobBuilder("calcPriceJob", jobRepository)
-                .start(calcPriceStep)
+    public Job calcStockPriceJob(JobRepository jobRepository, Step calcStockPriceStep) {
+        return new JobBuilder("calcStockPriceJob", jobRepository)
+                .start(calcStockPriceStep)
                 .build();
     }
 }

@@ -6,7 +6,7 @@ import lombok.Getter;
 
 @Getter
 @AllArgsConstructor
-public class MonthlyPrice {
+public class MonthlyIndexPrice {
     private Integer year;
     private Integer month;
     private Float startPrice;

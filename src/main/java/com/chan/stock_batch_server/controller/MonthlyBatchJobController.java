@@ -22,7 +22,7 @@ public class MonthlyBatchJobController {
     private final JobLauncher jobLauncher;
     private final Job calcPriceJob;
 
-    public MonthlyBatchJobController(JobLauncher jobLauncher, @Qualifier("calcPriceJob") Job calcPriceJob) {
+    public MonthlyBatchJobController(JobLauncher jobLauncher, @Qualifier("calcIndexPriceJob") Job calcPriceJob) {
         this.jobLauncher = jobLauncher;
         this.calcPriceJob = calcPriceJob;
     }

@@ -1,6 +1,6 @@
 package com.chan.stock_batch_server.config;
 
-import com.chan.stock_batch_server.dto.MonthlyPrice;
+import com.chan.stock_batch_server.dto.MonthlyIndexPrice;
 import com.chan.stock_batch_server.model.CalcIndexPrice;
 import jakarta.persistence.EntityManagerFactory;
 import org.springframework.batch.core.Job;
@@ -33,13 +33,13 @@ public class MonthlyIndexBatchConfig {
      */
     @Bean
     @StepScope
-    public JpaPagingItemReader<MonthlyPrice> monthlyPriceReader(
+    public JpaPagingItemReader<MonthlyIndexPrice> monthlyIndexPriceReader(
             EntityManagerFactory emf,
             @Value("#{jobParameters['year']}") Integer year,
             @Value("#{jobParameters['month']}") Integer month
     ) {
         String jpql = """
-            SELECT new com.chan.stock_batch_server.dto.MonthlyPrice(
+            SELECT new com.chan.stock_batch_server.dto.MonthlyIndexPrice(
                 YEAR(p.baseDate),
                 MONTH(p.baseDate),
                 (SELECT p2.closePrice
@@ -77,7 +77,7 @@ public class MonthlyIndexBatchConfig {
             GROUP BY p.indexInfo, YEAR(p.baseDate), MONTH(p.baseDate)
             ORDER BY p.indexInfo.id, YEAR(p.baseDate), MONTH(p.baseDate)
         """;
-        return new JpaPagingItemReaderBuilder<MonthlyPrice>()
+        return new JpaPagingItemReaderBuilder<MonthlyIndexPrice>()
                 .name("monthlyPriceReader")
                 .entityManagerFactory(emf)
                 .queryString(jpql)
@@ -90,7 +90,7 @@ public class MonthlyIndexBatchConfig {
      * 월별 수익률을 계산하여 CalcIndexPrice 객체 생성
      */
     @Bean
-    public ItemProcessor<MonthlyPrice, CalcIndexPrice> monthlyPriceProcessor() {
+    public ItemProcessor<MonthlyIndexPrice, CalcIndexPrice> monthlyIndexPriceProcessor() {
         return monthly -> {
             float ror = (float) ((monthly.getEndPrice() - monthly.getStartPrice()) / monthly.getStartPrice());
             LocalDate baseDate = LocalDate.of(monthly.getYear(), monthly.getMonth(), 1);
@@ -107,7 +107,7 @@ public class MonthlyIndexBatchConfig {
      * CalcIndexPrice 저장을 위한 JPA Writer
      */
     @Bean
-    public JpaItemWriter<CalcIndexPrice> calcPriceWriter(EntityManagerFactory emf) {
+    public JpaItemWriter<CalcIndexPrice> calcIndexPriceWriter(EntityManagerFactory emf) {
         JpaItemWriter<CalcIndexPrice> writer = new JpaItemWriter<>();
         writer.setEntityManagerFactory(emf);
         return writer;
@@ -117,15 +117,15 @@ public class MonthlyIndexBatchConfig {
      * Step 구성: Reader, Processor, Writer를 100건 단위 청크로 묶음
      */
     @Bean
-    public Step calcPriceStep(
+    public Step calcIndexPriceStep(
             JobRepository jobRepository,
             PlatformTransactionManager txMgr,
-            JpaPagingItemReader<MonthlyPrice> reader,
-            ItemProcessor<MonthlyPrice, CalcIndexPrice> processor,
+            JpaPagingItemReader<MonthlyIndexPrice> reader,
+            ItemProcessor<MonthlyIndexPrice, CalcIndexPrice> processor,
             JpaItemWriter<CalcIndexPrice> writer
     ) {
-        return new StepBuilder("calcPriceStep", jobRepository)
-                .<MonthlyPrice, CalcIndexPrice>chunk(100, txMgr)
+        return new StepBuilder("calcIndexPriceStep", jobRepository)
+                .<MonthlyIndexPrice, CalcIndexPrice>chunk(100, txMgr)
                 .reader(reader)
                 .processor(processor)
                 .writer(writer)
@@ -136,9 +136,9 @@ public class MonthlyIndexBatchConfig {
      * Job 구성: 하나의 Step으로 실행
      */
     @Bean
-    public Job calcPriceJob(JobRepository jobRepository, Step calcPriceStep) {
-        return new JobBuilder("calcPriceJob", jobRepository)
-                .start(calcPriceStep)
+    public Job calcIndexPriceJob(JobRepository jobRepository, Step calcIndexPriceStep) {
+        return new JobBuilder("calcIndexPriceJob", jobRepository)
+                .start(calcIndexPriceStep)
                 .build();
     }
 }
