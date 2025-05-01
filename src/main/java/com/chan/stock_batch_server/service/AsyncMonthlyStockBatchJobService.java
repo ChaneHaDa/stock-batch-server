@@ -7,10 +7,12 @@ import org.springframework.batch.core.JobParametersBuilder;
 import org.springframework.batch.core.launch.JobLauncher;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.scheduling.annotation.Async;
+import org.springframework.stereotype.Service;
 
 import java.time.LocalDate;
 import java.time.YearMonth;
 
+@Service
 public class AsyncMonthlyStockBatchJobService {
     private final JobLauncher jobLauncher;
     private final Job calcStockPriceJob;
