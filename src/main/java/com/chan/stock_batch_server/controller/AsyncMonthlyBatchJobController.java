@@ -34,7 +34,7 @@ public class AsyncMonthlyBatchJobController {
         asyncMonthlyIndexBatchJobService.runMonthlyIndexBatchByRange(startDate, endDate);
 
         return ResponseEntity.ok(
-                String.format("Triggered Async calcIndexPriceJob for %s → %s")
+                String.format("Triggered Async calcIndexPriceJob")
         );
     }
 
@@ -50,7 +50,7 @@ public class AsyncMonthlyBatchJobController {
         asyncMonthlyStockBatchJobService.runMonthlyStockBatchByRange(startDate, endDate);
 
         return ResponseEntity.ok(
-                String.format("Triggered Async calcIndexPriceJob for %s → %s")
+                String.format("Triggered Async calcIndexPriceJob")
         );
     }
 }

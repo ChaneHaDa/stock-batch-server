@@ -91,10 +91,30 @@ public class MonthlyStockPriceBatchConfig {
     @Bean
     public ItemProcessor<MonthlyStockPrice, CalcStockPrice> monthlyStockPriceProcessor() {
         return monthly -> {
-            float ror = (float) ((monthly.getEndPrice() - monthly.getStartPrice()) / monthly.getStartPrice());
+            // monthly.getStartPrice()와 monthly.getEndPrice()는 이제 Integer를 반환합니다.
+            // 나눗셈을 위해 float 또는 double로 형변환이 필요합니다.
+            Integer startPriceInt = monthly.getStartPrice();
+            Integer endPriceInt = monthly.getEndPrice();
+
+            if (startPriceInt == null || startPriceInt == 0) {
+                float ror = 0.0f;
+                LocalDate baseDate = LocalDate.of(monthly.getYear(), monthly.getMonth(), 1);
+                return CalcStockPrice.builder()
+                        .price(monthly.getAveragePrice().floatValue()) // Double -> float
+                        .monthlyRor(ror)
+                        .baseDate(baseDate)
+                        .stock(monthly.getStock())
+                        .build();
+            }
+
+            // float으로 형변환하여 계산
+            float startPrice = startPriceInt.floatValue();
+            float endPrice = endPriceInt.floatValue();
+            float ror = (endPrice - startPrice) / startPrice;
+
             LocalDate baseDate = LocalDate.of(monthly.getYear(), monthly.getMonth(), 1);
             return CalcStockPrice.builder()
-                    .price(monthly.getAveragePrice().floatValue())
+                    .price(monthly.getAveragePrice().floatValue()) // Double -> float
                     .monthlyRor(ror)
                     .baseDate(baseDate)
                     .stock(monthly.getStock())

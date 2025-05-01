@@ -1,6 +1,5 @@
 package com.chan.stock_batch_server.dto;
 
-import com.chan.stock_batch_server.model.IndexInfo;
 import com.chan.stock_batch_server.model.Stock;
 import lombok.AllArgsConstructor;
 import lombok.Getter;
@@ -10,8 +9,8 @@ import lombok.Getter;
 public class MonthlyStockPrice {
     private Integer year;
     private Integer month;
-    private Float startPrice;
-    private Float endPrice;
+    private Integer startPrice;
+    private Integer endPrice;
     private Double averagePrice;
     private Stock stock;
 }
