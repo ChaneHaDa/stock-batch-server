@@ -13,11 +13,11 @@ import java.time.LocalDate;
 import java.time.YearMonth;
 
 @Service
-public class AsyncMonthlyBatchJobService {
+public class AsyncMonthlyIndexBatchJobService {
     private final JobLauncher jobLauncher;
     private final Job calcIndexPriceJob;
 
-    public AsyncMonthlyBatchJobService(JobLauncher jobLauncher, @Qualifier("calcIndexPriceJob") Job calcIndexPriceJob) {
+    public AsyncMonthlyIndexBatchJobService(JobLauncher jobLauncher, @Qualifier("calcIndexPriceJob") Job calcIndexPriceJob) {
         this.jobLauncher = jobLauncher;
         this.calcIndexPriceJob = calcIndexPriceJob;
     }
