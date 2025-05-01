@@ -1,8 +1,6 @@
 package com.chan.stock_batch_server.config;
 
-import com.chan.stock_batch_server.dto.MonthlyIndexPrice;
 import com.chan.stock_batch_server.dto.MonthlyStockPrice;
-import com.chan.stock_batch_server.model.CalcIndexPrice;
 import com.chan.stock_batch_server.model.CalcStockPrice;
 import jakarta.persistence.EntityManagerFactory;
 import org.springframework.batch.core.Job;
@@ -79,7 +77,7 @@ public class MonthlyStockPriceBatchConfig {
             ORDER BY p.stock.id, YEAR(p.baseDate), MONTH(p.baseDate)
         """;
         return new JpaPagingItemReaderBuilder<MonthlyStockPrice>()
-                .name("monthlyPriceReader")
+                .name("monthlyStockPriceReader")
                 .entityManagerFactory(emf)
                 .queryString(jpql)
                 .parameterValues(Map.of("year", year, "month", month))
