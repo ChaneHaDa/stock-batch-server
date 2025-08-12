@@ -60,6 +60,10 @@ public class AsyncMonthlyBatchJobController {
 		@DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
 		LocalDate endDate
 	) throws Exception {
+		if (startDate.isAfter(endDate)) {
+			return ResponseEntity.badRequest().body("Start date must be before or equal to end date");
+		}
+		
 		asyncMonthlyIndexBatchJobService.runMonthlyIndexBatchByRange(startDate, endDate);
 
 		return ResponseEntity.ok("Triggered Async calcIndexPriceJob");
@@ -92,8 +96,12 @@ public class AsyncMonthlyBatchJobController {
 		@DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
 		LocalDate endDate
 	) throws Exception {
+		if (startDate.isAfter(endDate)) {
+			return ResponseEntity.badRequest().body("Start date must be before or equal to end date");
+		}
+		
 		asyncMonthlyStockBatchJobService.runMonthlyStockBatchByRange(startDate, endDate);
 
-		return ResponseEntity.ok("Triggered Async calcIndexPriceJob");
+		return ResponseEntity.ok("Triggered Async calcStockPriceJob");
 	}
 }

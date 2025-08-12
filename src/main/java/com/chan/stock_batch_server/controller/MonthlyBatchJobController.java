@@ -62,6 +62,13 @@ public class MonthlyBatchJobController {
 		@Parameter(description = "월 (1-12)", example = "12")
 		@RequestParam("month") int month) throws Exception {
 
+		if (month < 1 || month > 12) {
+			return ResponseEntity.badRequest().body("Month must be between 1 and 12");
+		}
+		if (year < 2000 || year > 2100) {
+			return ResponseEntity.badRequest().body("Year must be between 2000 and 2100");
+		}
+
 		JobParameters params = new JobParametersBuilder()
 			.addLong("year", (long)year)
 			.addLong("month", (long)month)
@@ -102,6 +109,10 @@ public class MonthlyBatchJobController {
 		@DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
 		LocalDate endDate
 	) throws Exception {
+		if (startDate.isAfter(endDate)) {
+			return ResponseEntity.badRequest().body("Start date must be before or equal to end date");
+		}
+		
 		YearMonth startYm = YearMonth.from(startDate);
 		YearMonth endYm = YearMonth.from(endDate);
 
@@ -143,6 +154,13 @@ public class MonthlyBatchJobController {
 		@Parameter(description = "월 (1-12)", example = "12")
 		@RequestParam("month") int month) throws Exception {
 
+		if (month < 1 || month > 12) {
+			return ResponseEntity.badRequest().body("Month must be between 1 and 12");
+		}
+		if (year < 2000 || year > 2100) {
+			return ResponseEntity.badRequest().body("Year must be between 2000 and 2100");
+		}
+
 		JobParameters params = new JobParametersBuilder()
 			.addLong("year", (long)year)
 			.addLong("month", (long)month)
@@ -183,6 +201,10 @@ public class MonthlyBatchJobController {
 		@DateTimeFormat(iso = DateTimeFormat.ISO.DATE)
 		LocalDate endDate
 	) throws Exception {
+		if (startDate.isAfter(endDate)) {
+			return ResponseEntity.badRequest().body("Start date must be before or equal to end date");
+		}
+		
 		YearMonth startYm = YearMonth.from(startDate);
 		YearMonth endYm = YearMonth.from(endDate);
 
