@@ -29,7 +29,7 @@ public class AsyncMonthlyStockBatchJobService {
     /**
      * 한 달 단위 배치 비동기 실행
      */
-    @Async
+    @Async("batchTaskExecutor")
     public Future<JobExecution> runMonthlyStockBatch(int year, int month) throws Exception {
         JobParameters params = new JobParametersBuilder()
                 .addLong("year", (long) year)
@@ -44,7 +44,7 @@ public class AsyncMonthlyStockBatchJobService {
     /**
      * 범위 내 모든 월 병렬 배치 실행 + 결과 추적
      */
-    @Async
+    @Async("batchTaskExecutor")
     public Future<List<JobExecution>> runMonthlyStockBatchByRange(LocalDate startDate, LocalDate endDate) throws Exception {
         YearMonth startYm = YearMonth.from(startDate);
         YearMonth endYm = YearMonth.from(endDate);

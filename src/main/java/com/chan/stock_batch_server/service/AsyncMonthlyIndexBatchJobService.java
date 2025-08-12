@@ -30,7 +30,7 @@ public class AsyncMonthlyIndexBatchJobService {
     /**
      * 한 달 단위 비동기 실행
      */
-    @Async
+    @Async("batchTaskExecutor")
     public Future<JobExecution> runMonthlyIndexBatch(int year, int month) throws Exception {
         JobParameters params = new JobParametersBuilder()
                 .addLong("year", (long) year)
@@ -45,7 +45,7 @@ public class AsyncMonthlyIndexBatchJobService {
     /**
      * 여러 달 단위 비동기 병렬 실행
      */
-    @Async
+    @Async("batchTaskExecutor")
     public Future<List<JobExecution>> runMonthlyIndexBatchByRange(LocalDate startDate, LocalDate endDate) throws Exception {
         YearMonth startYm = YearMonth.from(startDate);
         YearMonth endYm   = YearMonth.from(endDate);
