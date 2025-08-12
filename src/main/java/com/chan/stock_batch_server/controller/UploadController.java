@@ -76,15 +76,33 @@ public class UploadController {
 
 		for (MultipartFile file : files) {
 			String original = file.getOriginalFilename();
-			if (original == null || !original.endsWith(".json")) {
+			if (original == null || original.trim().isEmpty()) {
+				results.add("Unknown file — skipped (no filename)");
+				continue;
+			}
+			
+			if (!original.toLowerCase().endsWith(".json")) {
 				results.add(original + " — skipped (not a .json)");
 				continue;
 			}
+			
+			if (file.getSize() > 10 * 1024 * 1024) { // 10MB limit
+				results.add(original + " — skipped (file too large)");
+				continue;
+			}
+			
+			// Sanitize filename to prevent path traversal
+			String sanitizedName = original.replaceAll("[^a-zA-Z0-9.-]", "_");
+			if (!sanitizedName.equals(original)) {
+				results.add(original + " → renamed to " + sanitizedName);
+			}
 
 			// 로컬에 저장
-			Path target = Paths.get(uploadDir).resolve(original);
+			Path target = Paths.get(uploadDir).resolve(sanitizedName);
 			Files.createDirectories(target.getParent());
 			Files.copy(file.getInputStream(), target, StandardCopyOption.REPLACE_EXISTING);
+			
+			results.add(sanitizedName + " — uploaded");
 
 			//            // 2) Batch Job 실행 (파일별로 독립 파라미터)
 			//            JobParameters params = new JobParametersBuilder()
