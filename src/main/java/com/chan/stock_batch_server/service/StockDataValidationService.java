@@ -13,7 +13,7 @@ import java.util.regex.Pattern;
 @Service
 public class StockDataValidationService {
     
-    private static final Pattern ISIN_PATTERN = Pattern.compile("^KR\\d{10}$");
+    private static final Pattern ISIN_PATTERN = Pattern.compile("^[A-Z]{2}[A-Z0-9]{9}[0-9]$");
     private static final int MAX_STOCK_NAME_LENGTH = 100;
     private static final int MAX_SHORT_CODE_LENGTH = 20;
     
@@ -24,7 +24,7 @@ public class StockDataValidationService {
         if (stockData.getIsinCode() == null || stockData.getIsinCode().trim().isEmpty()) {
             errors.add("ISIN code is required");
         } else if (!ISIN_PATTERN.matcher(stockData.getIsinCode()).matches()) {
-            errors.add("ISIN code must follow pattern 'KR' + 10 digits");
+            errors.add("ISIN code must follow standard format (2 country letters + 9 alphanumeric + 1 check digit)");
         }
         
         // 주식명 검증
