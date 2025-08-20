@@ -7,6 +7,12 @@ import java.nio.file.StandardCopyOption;
 import java.util.ArrayList;
 import java.util.List;
 
+import org.springframework.batch.core.Job;
+import org.springframework.batch.core.JobExecution;
+import org.springframework.batch.core.JobParameters;
+import org.springframework.batch.core.JobParametersBuilder;
+import org.springframework.batch.core.launch.JobLauncher;
+import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.http.HttpStatus;
 import org.springframework.http.MediaType;
@@ -17,12 +23,13 @@ import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.RestController;
 import org.springframework.web.multipart.MultipartFile;
 
+import com.chan.stock_batch_server.dto.ApiResponse;
+
 import io.swagger.v3.oas.annotations.Operation;
 import io.swagger.v3.oas.annotations.Parameter;
 import io.swagger.v3.oas.annotations.media.Content;
 import io.swagger.v3.oas.annotations.media.ExampleObject;
 import io.swagger.v3.oas.annotations.media.Schema;
-import io.swagger.v3.oas.annotations.responses.ApiResponse;
 import io.swagger.v3.oas.annotations.responses.ApiResponses;
 import io.swagger.v3.oas.annotations.tags.Tag;
 
@@ -32,18 +39,24 @@ import io.swagger.v3.oas.annotations.tags.Tag;
 public class UploadController {
 
 	private final String uploadDir;
+	private final JobLauncher jobLauncher;
+	private final Job stockDataImportJob;
 
-	public UploadController(@Value("${file.upload-dir}") String uploadDir) {
+	public UploadController(@Value("${file.upload-dir}") String uploadDir,
+						JobLauncher jobLauncher,
+						@Qualifier("stockDataImportJob") Job stockDataImportJob) {
 		this.uploadDir = uploadDir;
+		this.jobLauncher = jobLauncher;
+		this.stockDataImportJob = stockDataImportJob;
 	}
 
 	@PostMapping(value = "/upload-json", consumes = MediaType.MULTIPART_FORM_DATA_VALUE)
 	@Operation(
-		summary = "JSON 파일 업로드",
-		description = "여러 개의 JSON 파일을 업로드하여 서버에 저장합니다. 현재는 파일 저장만 수행하며, 향후 배치 작업 연동 예정입니다."
+		summary = "JSON 파일 업로드 및 처리",
+		description = "여러 개의 JSON 파일을 업로드하고 StockData 처리 배치 작업을 실행합니다. StockNameHistory 기능도 함께 처리됩니다."
 	)
 	@ApiResponses(value = {
-		@ApiResponse(
+		@io.swagger.v3.oas.annotations.responses.ApiResponse(
 			responseCode = "202",
 			description = "파일 업로드가 성공적으로 처리됨",
 			content = @Content(
@@ -52,7 +65,7 @@ public class UploadController {
 				examples = @ExampleObject(value = "[\"file1.json — uploaded\", \"file2.json — uploaded\"]")
 			)
 		),
-		@ApiResponse(
+		@io.swagger.v3.oas.annotations.responses.ApiResponse(
 			responseCode = "400",
 			description = "업로드된 파일이 없거나 잘못된 파일 형식",
 			content = @Content(
@@ -60,17 +73,25 @@ public class UploadController {
 				examples = @ExampleObject(value = "[\"No files uploaded\"]")
 			)
 		),
-		@ApiResponse(responseCode = "500", description = "서버 내부 오류")
+		@io.swagger.v3.oas.annotations.responses.ApiResponse(responseCode = "500", description = "서버 내부 오류")
 	})
-	public ResponseEntity<List<String>> uploadJson(
+	public ResponseEntity<ApiResponse<List<String>>> uploadJson(
 		@Parameter(
 			description = "업로드할 JSON 파일들 (여러 개 선택 가능)",
 			required = true
 		)
-		@RequestParam("files") List<MultipartFile> files) throws Exception {
-		if (files == null || files.isEmpty()) {
-			return ResponseEntity.badRequest().body(List.of("No files uploaded"));
-		}
+		@RequestParam("files") List<MultipartFile> files,
+		@Parameter(
+			description = "업로드 후 즉시 배치 처리 여부",
+			example = "true"
+		)
+		@RequestParam(value = "processImmediately", defaultValue = "true") boolean processImmediately) {
+		try {
+			if (files == null || files.isEmpty()) {
+				return ResponseEntity.badRequest().body(
+					ApiResponse.error("No files uploaded")
+				);
+			}
 
 		List<String> results = new ArrayList<>();
 
@@ -104,19 +125,29 @@ public class UploadController {
 			
 			results.add(sanitizedName + " — uploaded");
 
-			//            // 2) Batch Job 실행 (파일별로 독립 파라미터)
-			//            JobParameters params = new JobParametersBuilder()
-			//                    .addString("fileName", target.toString())
-			//                    .addLong("timestamp", System.currentTimeMillis())
-			//                    .toJobParameters();
-			//
-			//            JobExecution exec = jobLauncher.run(importJob, params);
-			//            results.add(original + " — job status: " + exec.getStatus());
+			if (processImmediately) {
+				try {
+					JobParameters params = new JobParametersBuilder()
+						.addString("fileName", target.toString())
+						.addLong("timestamp", System.currentTimeMillis())
+						.toJobParameters();
+
+					JobExecution exec = jobLauncher.run(stockDataImportJob, params);
+					results.add(sanitizedName + " — batch job status: " + exec.getStatus());
+				} catch (Exception e) {
+					results.add(sanitizedName + " — batch job failed: " + e.getMessage());
+				}
+			}
 		}
-		// todo: job code
 
 		return ResponseEntity
 			.status(HttpStatus.ACCEPTED)
-			.body(results);
+			.body(ApiResponse.success("Files processed successfully", results));
+		
+		} catch (Exception e) {
+			return ResponseEntity
+				.status(HttpStatus.INTERNAL_SERVER_ERROR)
+				.body(ApiResponse.error("File processing failed: " + e.getMessage()));
+		}
 	}
 }
