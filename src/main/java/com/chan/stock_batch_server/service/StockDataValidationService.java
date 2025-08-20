@@ -104,49 +104,55 @@ public class StockDataValidationService {
             errors.add("Base date is required");
         }
         
-        // 가격 데이터는 양수여야 함
-        if (priceData.getOpenPrice() != null && priceData.getOpenPrice() <= 0) {
-            errors.add("Open price must be positive");
+        // 가격 데이터는 0 이상이어야 함 (0 허용)
+        if (priceData.getOpenPrice() != null && priceData.getOpenPrice() < 0) {
+            errors.add("Open price cannot be negative");
         }
         
-        if (priceData.getClosePrice() != null && priceData.getClosePrice() <= 0) {
-            errors.add("Close price must be positive");
+        if (priceData.getClosePrice() != null && priceData.getClosePrice() < 0) {
+            errors.add("Close price cannot be negative");
         }
         
-        if (priceData.getHighPrice() != null && priceData.getHighPrice() <= 0) {
-            errors.add("High price must be positive");
+        if (priceData.getHighPrice() != null && priceData.getHighPrice() < 0) {
+            errors.add("High price cannot be negative");
         }
         
-        if (priceData.getLowPrice() != null && priceData.getLowPrice() <= 0) {
-            errors.add("Low price must be positive");
+        if (priceData.getLowPrice() != null && priceData.getLowPrice() < 0) {
+            errors.add("Low price cannot be negative");
         }
         
         // 가격 관계 검증 (High >= Low, High >= Open/Close, Low <= Open/Close)
-        if (priceData.getHighPrice() != null && priceData.getLowPrice() != null) {
+        // 0인 경우는 유효한 값으로 간주하여 검증에서 제외
+        if (priceData.getHighPrice() != null && priceData.getLowPrice() != null && 
+            priceData.getHighPrice() > 0 && priceData.getLowPrice() > 0) {
             if (priceData.getHighPrice() < priceData.getLowPrice()) {
                 errors.add("High price must be greater than or equal to low price");
             }
         }
         
-        if (priceData.getHighPrice() != null && priceData.getOpenPrice() != null) {
+        if (priceData.getHighPrice() != null && priceData.getOpenPrice() != null && 
+            priceData.getHighPrice() > 0 && priceData.getOpenPrice() > 0) {
             if (priceData.getHighPrice() < priceData.getOpenPrice()) {
                 errors.add("High price must be greater than or equal to open price");
             }
         }
         
-        if (priceData.getHighPrice() != null && priceData.getClosePrice() != null) {
+        if (priceData.getHighPrice() != null && priceData.getClosePrice() != null && 
+            priceData.getHighPrice() > 0 && priceData.getClosePrice() > 0) {
             if (priceData.getHighPrice() < priceData.getClosePrice()) {
                 errors.add("High price must be greater than or equal to close price");
             }
         }
         
-        if (priceData.getLowPrice() != null && priceData.getOpenPrice() != null) {
+        if (priceData.getLowPrice() != null && priceData.getOpenPrice() != null && 
+            priceData.getLowPrice() > 0 && priceData.getOpenPrice() > 0) {
             if (priceData.getLowPrice() > priceData.getOpenPrice()) {
                 errors.add("Low price must be less than or equal to open price");
             }
         }
         
-        if (priceData.getLowPrice() != null && priceData.getClosePrice() != null) {
+        if (priceData.getLowPrice() != null && priceData.getClosePrice() != null && 
+            priceData.getLowPrice() > 0 && priceData.getClosePrice() > 0) {
             if (priceData.getLowPrice() > priceData.getClosePrice()) {
                 errors.add("Low price must be less than or equal to close price");
             }
