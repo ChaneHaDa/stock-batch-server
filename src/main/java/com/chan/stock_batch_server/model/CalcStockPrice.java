@@ -1,6 +1,6 @@
 package com.chan.stock_batch_server.model;
 
-import com.fasterxml.jackson.annotation.JsonIgnore;
+import com.fasterxml.jackson.annotation.JsonBackReference;
 import jakarta.persistence.*;
 import lombok.AllArgsConstructor;
 import lombok.Builder;
@@ -23,8 +23,15 @@ public class CalcStockPrice {
     private Float monthlyRor;
     private LocalDate baseDate;
 
-    @JsonIgnore
     @ManyToOne
     @JoinColumn(name = "stock_id")
+    @JsonBackReference
     private Stock stock;
+
+    public void setStock(Stock stock) {
+        this.stock = stock;
+        if (stock != null && !stock.getCalcStockPriceList().contains(this)) {
+            stock.getCalcStockPriceList().add(this);
+        }
+    }
 }
