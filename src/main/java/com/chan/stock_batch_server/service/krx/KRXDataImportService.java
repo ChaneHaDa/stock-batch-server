@@ -32,33 +32,47 @@ public class KRXDataImportService {
 	private final StockService stockService;
 	private final IndexInfoService indexInfoService;
 	private final StockNameHistoryService stockNameHistoryService;
+	private final MonthlyCalculationService monthlyCalculationService;
 	@Value("${krx.data.path:../krx-json-data}")
 	private String krxDataPath;
 
 	/**
 	 * 특정 년월의 KRX 데이터 임포트
+	 * Note: @Transactional is intentionally NOT used here to allow partial success.
+	 * Each sub-service has its own transaction boundary for better error isolation.
 	 */
 	public void importMonthData(int year, int month) {
 		log.info("Starting KRX data import for {}-{}", year, month);
 
 		try {
 			// 1. STOCK/ETF 데이터 임포트
+			log.info("Step 1/4: Importing STOCK/ETF data...");
 			Map<String, List<KRXStockData>> stockDataMap = importStockData(year, month);
+			log.info("Imported data for {} unique stocks/ETFs", stockDataMap.size());
 
 			// 2. Index 데이터 임포트
+			log.info("Step 2/4: Importing Index data...");
 			List<KRXIndexData> indexDataList = importIndexData(year, month);
+			log.info("Imported {} index price records", indexDataList.size());
 
 			// 3. Stock Name History 생성 (가장 중요)
+			log.info("Step 3/4: Generating stock name histories...");
 			stockNameHistoryService.generateAllStockNameHistories(stockDataMap);
+			log.info("Stock name history generation completed");
 
 			// 4. Calc 데이터 계산
+			log.info("Step 4/4: Calculating monthly aggregated data...");
 			calculateMonthlyData(year, month);
+			log.info("Monthly calculation completed");
 
-			log.info("KRX data import completed for {}-{}", year, month);
+			log.info("=== KRX data import completed successfully for {}-{} ===", year, month);
 
+		} catch (IOException e) {
+			log.error("File I/O error during KRX data import for {}-{}", year, month, e);
+			throw new RuntimeException("Failed to read KRX data files: " + e.getMessage(), e);
 		} catch (Exception e) {
-			log.error("Error importing KRX data for {}-{}", year, month, e);
-			throw new RuntimeException("KRX data import failed", e);
+			log.error("Unexpected error importing KRX data for {}-{}", year, month, e);
+			throw new RuntimeException("KRX data import failed: " + e.getMessage(), e);
 		}
 	}
 
@@ -89,24 +103,38 @@ public class KRXDataImportService {
 		String marketCategory, Map<String, List<KRXStockData>> allStockData) throws IOException {
 		Path directory = Paths.get(directoryPath);
 		if (!Files.exists(directory)) {
-			log.warn("Directory not found: {}", directoryPath);
+			log.warn("Directory not found: {} - Skipping {} data", directoryPath, marketCategory);
 			return;
 		}
 
 		String monthPattern = String.format("%d%02d", year, month);
+		int processedFiles = 0;
 
 		try (Stream<Path> files = Files.list(directory)) {
-			files.filter(file -> file.getFileName().toString().startsWith(monthPattern))
+			List<Path> matchingFiles = files
+				.filter(file -> file.getFileName().toString().startsWith(monthPattern))
 				.filter(file -> file.getFileName().toString().endsWith(".json"))
 				.sorted()
-				.forEach(file -> {
-					try {
-						List<KRXStockData> stockDataList = parseStockFile(file, marketCategory);
-						mergeStockData(allStockData, stockDataList);
-					} catch (IOException e) {
-						log.error("Error processing file: {}", file, e);
-					}
-				});
+				.toList();
+
+			if (matchingFiles.isEmpty()) {
+				log.warn("No {} data files found for {}-{} in {}", marketCategory, year, month, directoryPath);
+				return;
+			}
+
+			for (Path file : matchingFiles) {
+				try {
+					List<KRXStockData> stockDataList = parseStockFile(file, marketCategory);
+					mergeStockData(allStockData, stockDataList);
+					processedFiles++;
+					log.debug("Processed {} file: {} ({} records)", marketCategory, file.getFileName(), stockDataList.size());
+				} catch (IOException e) {
+					log.error("Error processing {} file: {}", marketCategory, file, e);
+					throw e; // Re-throw to fail the entire operation
+				}
+			}
+
+			log.info("Processed {} {} files for {}-{}", processedFiles, marketCategory, year, month);
 		}
 	}
 
@@ -200,24 +228,38 @@ public class KRXDataImportService {
 
 		Path directory = Paths.get(directoryPath);
 		if (!Files.exists(directory)) {
-			log.warn("Index directory not found: {}", directoryPath);
+			log.warn("Index directory not found: {} - Skipping {} indices", directoryPath, category);
 			return indexDataList;
 		}
 
 		String monthPattern = String.format("%d%02d", year, month);
+		int processedFiles = 0;
 
 		try (Stream<Path> files = Files.list(directory)) {
-			files.filter(file -> file.getFileName().toString().startsWith(monthPattern))
+			List<Path> matchingFiles = files
+				.filter(file -> file.getFileName().toString().startsWith(monthPattern))
 				.filter(file -> file.getFileName().toString().endsWith(".json"))
 				.sorted()
-				.forEach(file -> {
-					try {
-						List<KRXIndexData> data = parseIndexFile(file, category);
-						indexDataList.addAll(data);
-					} catch (IOException e) {
-						log.error("Error processing index file: {}", file, e);
-					}
-				});
+				.toList();
+
+			if (matchingFiles.isEmpty()) {
+				log.warn("No {} index files found for {}-{} in {}", category, year, month, directoryPath);
+				return indexDataList;
+			}
+
+			for (Path file : matchingFiles) {
+				try {
+					List<KRXIndexData> data = parseIndexFile(file, category);
+					indexDataList.addAll(data);
+					processedFiles++;
+					log.debug("Processed {} index file: {} ({} records)", category, file.getFileName(), data.size());
+				} catch (IOException e) {
+					log.error("Error processing {} index file: {}", category, file, e);
+					throw e; // Re-throw to fail the entire operation
+				}
+			}
+
+			log.info("Processed {} {} index files for {}-{}", processedFiles, category, year, month);
 		}
 
 		return indexDataList;
@@ -295,10 +337,8 @@ public class KRXDataImportService {
 	 * 월별 계산 데이터 생성
 	 */
 	private void calculateMonthlyData(int year, int month) {
-		// 기존의 MonthlyStockPriceBatchConfig 활용
-		// Spring Batch Job으로 실행
 		log.info("Calculating monthly data for {}-{}", year, month);
-		log.info("Monthly batch calculation will be implemented in future release");
+		monthlyCalculationService.calculateMonthlyData(year, month);
 	}
 
 	// 안전한 숫자 변환 헬퍼 메서드들

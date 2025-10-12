@@ -21,8 +21,6 @@ public class IndexInfo {
     private Integer id;
     private String name;
     private String category;
-    private LocalDate startAt;
-    private LocalDate endAt;
 
     @OneToMany(mappedBy = "indexInfo")
     private List<IndexPrice> indexPriceList;

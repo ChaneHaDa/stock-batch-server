@@ -1,28 +1,24 @@
--- KRX 데이터 마이그레이션을 위한 스키마 생성
+-- KRX Stock and Index Data Schema (aligned with backtest-api)
 
--- Stock 테이블
-CREATE TABLE IF NOT EXISTS stock (
+-- Create Stock table
+CREATE TABLE stock (
     id SERIAL PRIMARY KEY,
     name VARCHAR(255),
     short_code VARCHAR(255),
     isin_code VARCHAR(255) UNIQUE,
-    market_category VARCHAR(255),
-    start_at DATE,
-    end_at DATE
+    market_category VARCHAR(255)
 );
 
--- IndexInfo 테이블
-CREATE TABLE IF NOT EXISTS index_info (
+-- Create IndexInfo table
+CREATE TABLE index_info (
     id SERIAL PRIMARY KEY,
     name VARCHAR(255),
     category VARCHAR(255),
-    start_at DATE,
-    end_at DATE,
     CONSTRAINT uk_index_info_name_category UNIQUE (name, category)
 );
 
--- StockPrice 테이블
-CREATE TABLE IF NOT EXISTS stock_price (
+-- Create StockPrice table
+CREATE TABLE stock_price (
     id SERIAL PRIMARY KEY,
     close_price INTEGER,
     open_price INTEGER,
@@ -32,11 +28,12 @@ CREATE TABLE IF NOT EXISTS stock_price (
     trade_amount BIGINT,
     issued_count BIGINT,
     base_date DATE,
-    stock_id INTEGER REFERENCES stock(id)
+    stock_id INTEGER REFERENCES stock(id),
+    CONSTRAINT uk_stock_price_stock_date UNIQUE (stock_id, base_date)
 );
 
--- IndexPrice 테이블
-CREATE TABLE IF NOT EXISTS index_price (
+-- Create IndexPrice table
+CREATE TABLE index_price (
     id SERIAL PRIMARY KEY,
     close_price REAL,
     open_price REAL,
@@ -44,33 +41,43 @@ CREATE TABLE IF NOT EXISTS index_price (
     high_price REAL,
     yearly_diff REAL,
     base_date DATE,
-    index_info_id INTEGER REFERENCES index_info(id)
+    index_info_id INTEGER REFERENCES index_info(id),
+    CONSTRAINT uk_index_price_info_date UNIQUE (index_info_id, base_date)
 );
 
--- CalcStockPrice 테이블
-CREATE TABLE IF NOT EXISTS calc_stock_price (
+-- Create CalcStockPrice table
+CREATE TABLE calc_stock_price (
     id SERIAL PRIMARY KEY,
     price REAL,
     monthly_ror REAL,
     base_date DATE,
-    stock_id INTEGER REFERENCES stock(id)
+    stock_id INTEGER REFERENCES stock(id),
+    CONSTRAINT uk_calc_stock_price_stock_date UNIQUE (stock_id, base_date)
 );
 
--- CalcIndexPrice 테이블
-CREATE TABLE IF NOT EXISTS calc_index_price (
+-- Create CalcIndexPrice table
+CREATE TABLE calc_index_price (
     id SERIAL PRIMARY KEY,
     price REAL,
     monthly_ror REAL,
     base_date DATE,
-    index_info_id INTEGER REFERENCES index_info(id)
+    index_info_id INTEGER REFERENCES index_info(id),
+    CONSTRAINT uk_calc_index_price_info_date UNIQUE (index_info_id, base_date)
 );
 
--- StockNameHistory 테이블 (가장 중요)
-CREATE TABLE IF NOT EXISTS stock_name_history (
+-- Create StockNameHistory table
+CREATE TABLE stock_name_history (
     id SERIAL PRIMARY KEY,
     name VARCHAR(255),
     start_at DATE,
     end_at DATE,
-    stock_id INTEGER NOT NULL REFERENCES stock(id),
-    CONSTRAINT uk_stock_name_history_unique UNIQUE (stock_id, name, start_at)
+    stock_id INTEGER NOT NULL REFERENCES stock(id)
 );
+
+-- Create basic indexes for performance
+CREATE INDEX idx_stock_isin_code ON stock(isin_code);
+CREATE INDEX idx_stock_price_stock_id ON stock_price(stock_id);
+CREATE INDEX idx_stock_price_base_date ON stock_price(base_date);
+CREATE INDEX idx_index_price_index_info_id ON index_price(index_info_id);
+CREATE INDEX idx_index_price_base_date ON index_price(base_date);
+CREATE INDEX idx_stock_name_history_stock_id ON stock_name_history(stock_id);
