@@ -113,7 +113,7 @@ public class StockService {
 					StockPrice price = StockPrice.builder()
 						.stock(stock)
 						.baseDate(baseDate)
-						.closePrice(data.getClpr())
+								.closePrice(data.getClpr())
 						.openPrice(data.getMkp())
 						.highPrice(data.getHipr())
 						.lowPrice(data.getLopr())

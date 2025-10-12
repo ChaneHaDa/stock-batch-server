@@ -55,17 +55,17 @@ public class KRXDataImportService {
 			List<KRXIndexData> indexDataList = importIndexData(year, month);
 			log.info("Imported {} index price records", indexDataList.size());
 
-			// 3. Stock Name History 생성 (TEMPORARILY DISABLED - needs bulk optimization)
-			// log.info("Step 3/4: Generating stock name histories...");
-			// stockNameHistoryService.generateAllStockNameHistories(stockDataMap);
-			// log.info("Stock name history generation completed");
+			// 3. Stock Name History 재생성 (Bulk Processing)
+			log.info("Step 3/4: Regenerating stock name histories...");
+			stockNameHistoryService.regenerateAllStockNameHistories(stockDataMap);
+			log.info("Stock name history regeneration completed");
 
 			// 4. Calc 데이터 계산 (TEMPORARILY DISABLED - needs bulk optimization)
 			// log.info("Step 4/4: Calculating monthly aggregated data...");
 			// calculateMonthlyData(year, month);
 			// log.info("Monthly calculation completed");
 
-			log.info("=== KRX data import completed successfully for {}-{} (Steps 1-2 only) ===", year, month);
+			log.info("=== KRX data import completed successfully for {}-{} (Steps 1-3) ===", year, month);
 
 		} catch (IOException e) {
 			log.error("File I/O error during KRX data import for {}-{}", year, month, e);

@@ -139,7 +139,7 @@ public class IndexInfoService {
 					IndexPrice price = IndexPrice.builder()
 						.indexInfo(indexInfo)
 						.baseDate(baseDate)
-						.closePrice(data.getClpr() != null ? data.getClpr().floatValue() : null)
+							.closePrice(data.getClpr() != null ? data.getClpr().floatValue() : null)
 						.openPrice(data.getMkp() != null ? data.getMkp().floatValue() : null)
 						.highPrice(data.getHipr() != null ? data.getHipr().floatValue() : null)
 						.lowPrice(data.getLopr() != null ? data.getLopr().floatValue() : null)
