@@ -106,15 +106,36 @@ public class IndexInfoService {
 				.map(IndexPrice::getBaseDate)
 				.collect(Collectors.toSet());
 
-			// 신규 가격 데이터만 필터링
+			// Deduplicate input data by baseDate (keep first occurrence)
+			Map<LocalDate, KRXIndexData> deduplicatedData = new HashMap<>();
 			for (KRXIndexData data : entry.getValue()) {
 				try {
 					LocalDate baseDate = LocalDate.parse(data.getBasDt(), DATE_FORMATTER);
+					// Only add if we haven't seen this date before
+					deduplicatedData.putIfAbsent(baseDate, data);
+				} catch (Exception e) {
+					log.error("Error parsing date for {}: {}", indexInfo.getName(), e.getMessage());
+				}
+			}
 
-					if (existingDates.contains(baseDate)) {
-						continue; // 중복 스킵
-					}
+			// Log if duplicates were found
+			int originalCount = entry.getValue().size();
+			int deduplicatedCount = deduplicatedData.size();
+			if (originalCount > deduplicatedCount) {
+				log.warn("Found {} duplicate dates for index {}, keeping {} unique records",
+					(originalCount - deduplicatedCount), indexInfo.getName(), deduplicatedCount);
+			}
 
+			// 신규 가격 데이터만 필터링
+			for (Map.Entry<LocalDate, KRXIndexData> dataEntry : deduplicatedData.entrySet()) {
+				LocalDate baseDate = dataEntry.getKey();
+				KRXIndexData data = dataEntry.getValue();
+
+				if (existingDates.contains(baseDate)) {
+					continue; // 중복 스킵
+				}
+
+				try {
 					IndexPrice price = IndexPrice.builder()
 						.indexInfo(indexInfo)
 						.baseDate(baseDate)
@@ -128,7 +149,7 @@ public class IndexInfoService {
 					allPricesToSave.add(price);
 
 				} catch (Exception e) {
-					log.error("Error parsing index price for {}: {}", indexInfo.getName(), e.getMessage());
+					log.error("Error building index price for {}: {}", indexInfo.getName(), e.getMessage());
 				}
 			}
 		}
