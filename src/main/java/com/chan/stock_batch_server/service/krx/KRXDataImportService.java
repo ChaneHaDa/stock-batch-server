@@ -60,12 +60,12 @@ public class KRXDataImportService {
 			stockNameHistoryService.regenerateAllStockNameHistories(stockDataMap);
 			log.info("Stock name history regeneration completed");
 
-			// 4. Calc 데이터 계산 (TEMPORARILY DISABLED - needs bulk optimization)
-			// log.info("Step 4/4: Calculating monthly aggregated data...");
-			// calculateMonthlyData(year, month);
-			// log.info("Monthly calculation completed");
+			// 4. Calc 데이터 계산 (Bulk Optimized)
+			log.info("Step 4/4: Calculating monthly aggregated data...");
+			calculateMonthlyData(year, month);
+			log.info("Monthly calculation completed");
 
-			log.info("=== KRX data import completed successfully for {}-{} (Steps 1-3) ===", year, month);
+			log.info("=== KRX data import completed successfully for {}-{} (All 4 Steps) ===", year, month);
 
 		} catch (IOException e) {
 			log.error("File I/O error during KRX data import for {}-{}", year, month, e);
