@@ -1,6 +1,7 @@
 package com.chan.stock_batch_server.repository;
 
 import java.time.LocalDate;
+import java.util.List;
 import java.util.Optional;
 
 import org.springframework.data.jpa.repository.JpaRepository;
@@ -17,4 +18,6 @@ public interface CalcStockPriceRepository extends JpaRepository<CalcStockPrice, 
 
 	@Query("SELECT c FROM CalcStockPrice c WHERE c.stock = :stock AND c.baseDate < :baseDate ORDER BY c.baseDate DESC")
 	Optional<CalcStockPrice> findPreviousMonthPrice(@Param("stock") Stock stock, @Param("baseDate") LocalDate baseDate);
+
+	List<CalcStockPrice> findByBaseDateBetween(LocalDate startDate, LocalDate endDate);
 }

@@ -72,9 +72,9 @@ public class MonthlyCalculationService {
 		List<Stock> stocks = stockRepository.findAll();
 		log.info("Loaded {} stocks", stocks.size());
 
-		// 2. Load all stock prices (1 query)
-		List<StockPrice> allPrices = stockPriceRepository.findAll();
-		log.info("Loaded {} stock prices", allPrices.size());
+		// 2. Load ONLY the month's stock prices (1 query)
+		List<StockPrice> allPrices = stockPriceRepository.findByBaseDateBetween(startDate, endDate);
+		log.info("Loaded {} stock prices for date range {} to {}", allPrices.size(), startDate, endDate);
 
 		// 3. Group prices by stock_id (in-memory HashMap)
 		Map<Integer, List<StockPrice>> pricesByStock = allPrices.stream()
@@ -90,14 +90,16 @@ public class MonthlyCalculationService {
 			));
 		log.info("Grouped prices for {} stocks", pricesByStock.size());
 
-		// 4. Load all existing CalcStockPrice for duplicate check (1 query)
-		List<CalcStockPrice> existingCalcs = calcStockPriceRepository.findAll();
+		// 4. Load ONLY current and previous month's CalcStockPrice for duplicate check and RoR calculation (1 query)
+		LocalDate previousMonthEnd = startDate.minusDays(1);
+		List<CalcStockPrice> existingCalcs = calcStockPriceRepository.findByBaseDateBetween(previousMonthEnd, endDate);
 		Map<String, CalcStockPrice> existingCalcMap = existingCalcs.stream()
 			.collect(Collectors.toMap(
 				c -> c.getStock().getId() + "_" + c.getBaseDate(),
 				c -> c
 			));
-		log.info("Loaded {} existing calc prices", existingCalcs.size());
+		log.info("Loaded {} existing calc prices for date range {} to {}", existingCalcs.size(), previousMonthEnd,
+			endDate);
 
 		// 5. Group CalcStockPrice by stock_id for previous month lookup (in-memory HashMap)
 		Map<Integer, List<CalcStockPrice>> calcsByStock = existingCalcs.stream()
@@ -111,7 +113,7 @@ public class MonthlyCalculationService {
 					}
 				)
 			));
- 
+
 		// 6. Calculate in memory (중복 체크 후 INSERT만)
 		List<CalcStockPrice> newCalcs = new ArrayList<>();
 		int calculatedCount = 0;
@@ -189,9 +191,9 @@ public class MonthlyCalculationService {
 		List<IndexInfo> indices = indexInfoRepository.findAll();
 		log.info("Loaded {} indices", indices.size());
 
-		// 2. Load all index prices (1 query)
-		List<IndexPrice> allPrices = indexPriceRepository.findAll();
-		log.info("Loaded {} index prices", allPrices.size());
+		// 2. Load ONLY the month's index prices (1 query)
+		List<IndexPrice> allPrices = indexPriceRepository.findByBaseDateBetween(startDate, endDate);
+		log.info("Loaded {} index prices for date range {} to {}", allPrices.size(), startDate, endDate);
 
 		// 3. Group prices by index_info_id (in-memory HashMap)
 		Map<Integer, List<IndexPrice>> pricesByIndex = allPrices.stream()
@@ -207,14 +209,16 @@ public class MonthlyCalculationService {
 			));
 		log.info("Grouped prices for {} indices", pricesByIndex.size());
 
-		// 4. Load all existing CalcIndexPrice for duplicate check (1 query)
-		List<CalcIndexPrice> existingCalcs = calcIndexPriceRepository.findAll();
+		// 4. Load ONLY current and previous month's CalcIndexPrice for duplicate check and RoR calculation (1 query)
+		LocalDate previousMonthEnd = startDate.minusDays(1);
+		List<CalcIndexPrice> existingCalcs = calcIndexPriceRepository.findByBaseDateBetween(previousMonthEnd, endDate);
 		Map<String, CalcIndexPrice> existingCalcMap = existingCalcs.stream()
 			.collect(Collectors.toMap(
 				c -> c.getIndexInfo().getId() + "_" + c.getBaseDate(),
 				c -> c
 			));
-		log.info("Loaded {} existing calc index prices", existingCalcs.size());
+		log.info("Loaded {} existing calc index prices for date range {} to {}", existingCalcs.size(), previousMonthEnd,
+			endDate);
 
 		// 5. Group CalcIndexPrice by index_info_id for previous month lookup
 		Map<Integer, List<CalcIndexPrice>> calcsByIndex = existingCalcs.stream()
