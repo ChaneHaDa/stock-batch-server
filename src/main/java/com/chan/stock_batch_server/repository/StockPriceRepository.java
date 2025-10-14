@@ -16,4 +16,6 @@ public interface StockPriceRepository extends JpaRepository<StockPrice, Integer>
 	List<StockPrice> findByStockIdAndBaseDate(Integer stockId, LocalDate baseDate);
 
 	boolean existsByStockAndBaseDate(Stock stock, LocalDate baseDate);
+
+	List<StockPrice> findByBaseDateBetween(LocalDate startDate, LocalDate endDate);
 }

@@ -23,16 +23,15 @@ import lombok.extern.slf4j.Slf4j;
 @Service
 @RequiredArgsConstructor
 public class StockService {
-
 	private static final DateTimeFormatter DATE_FORMATTER = DateTimeFormatter.ofPattern("yyyyMMdd");
 	private final StockRepository stockRepository;
 	private final StockPriceRepository stockPriceRepository;
 
 	/**
-	 * Stock 데이터 저장 (UPSERT 방식)
+	 * Stock 데이터 저장 (중복 체크 방식)
 	 * 1. 모든 기존 Stock를 한 번에 조회
 	 * 2. 신규 Stock만 bulk insert
-	 * 3. 모든 StockPrice를 UPSERT (INSERT or UPDATE)
+	 * 3. Stock별로 기존 날짜 조회 후 중복 없는 데이터만 INSERT
 	 */
 	@Transactional
 	public void saveStockData(Map<String, List<KRXStockData>> allStockData) {
@@ -41,7 +40,7 @@ public class StockService {
 			return;
 		}
 
-		log.info("Starting bulk save for {} unique stocks (UPSERT mode)", allStockData.size());
+		log.info("Starting bulk save for {} unique stocks", allStockData.size());
 		long startTime = System.currentTimeMillis();
 
 		// 1. 기존 모든 Stock 조회 (1번의 쿼리)
@@ -79,22 +78,47 @@ public class StockService {
 			}
 		}
 
-		// 4. 모든 StockPrice를 UPSERT 처리
-		log.info("Preparing StockPrice data for UPSERT...");
+		// 4. StockPrice 저장 (중복 체크 후 INSERT만)
+		log.info("Preparing StockPrice data...");
 
-		// 4-1. 기존 모든 StockPrice 조회 (ID 포함) - 1번 쿼리
-		List<StockPrice> allExistingPrices = stockPriceRepository.findAll();
-		Map<String, StockPrice> existingPriceMap = allExistingPrices.stream()
-			.collect(Collectors.toMap(
-				p -> p.getStock().getId() + "_" + p.getBaseDate(),
-				p -> p
+		// 4-1. 임포트할 데이터의 날짜 범위 추출
+		LocalDate minDate = null;
+		LocalDate maxDate = null;
+		for (List<KRXStockData> dataList : allStockData.values()) {
+			for (KRXStockData data : dataList) {
+				try {
+					LocalDate date = LocalDate.parse(data.getBasDt(), DATE_FORMATTER);
+					if (minDate == null || date.isBefore(minDate))
+						minDate = date;
+					if (maxDate == null || date.isAfter(maxDate))
+						maxDate = date;
+				} catch (Exception e) {
+					// Skip invalid dates
+				}
+			}
+		}
+
+		if (minDate == null || maxDate == null) {
+			log.warn("No valid dates found in import data");
+			return;
+		}
+
+		log.info("Import date range: {} to {}", minDate, maxDate);
+
+		// 4-2. 해당 월의 기존 데이터만 조회 (1번 쿼리!)
+		List<StockPrice> monthPrices = stockPriceRepository.findByBaseDateBetween(minDate, maxDate);
+		log.info("Loaded {} existing prices for date range", monthPrices.size());
+
+		// 4-3. HashMap으로 stock별 날짜 그룹핑 (메모리에서 처리)
+		Map<Integer, java.util.Set<LocalDate>> existingDatesByStock = monthPrices.stream()
+			.collect(Collectors.groupingBy(
+				p -> p.getStock().getId(),
+				Collectors.mapping(StockPrice::getBaseDate, Collectors.toSet())
 			));
-		log.info("Loaded {} existing stock prices from DB", existingPriceMap.size());
 
-		// 4-2. INSERT/UPDATE 대상 준비
+		// 4-4. 중복 체크 및 신규 데이터만 준비
 		List<StockPrice> allPricesToSave = new ArrayList<>();
-		int insertCount = 0;
-		int updateCount = 0;
+		int skippedCount = 0;
 
 		for (Map.Entry<String, List<KRXStockData>> entry : allStockData.entrySet()) {
 			String isinCode = entry.getKey();
@@ -105,42 +129,36 @@ public class StockService {
 				continue;
 			}
 
+			// HashMap에서 해당 Stock의 기존 날짜 조회 (DB 쿼리 없음!)
+			java.util.Set<LocalDate> existingDates = existingDatesByStock.getOrDefault(
+				stock.getId(),
+				java.util.Collections.emptySet()
+			);
+
 			for (KRXStockData data : entry.getValue()) {
 				try {
 					LocalDate baseDate = LocalDate.parse(data.getBasDt(), DATE_FORMATTER);
-					String key = stock.getId() + "_" + baseDate;
 
-					StockPrice existingPrice = existingPriceMap.get(key);
-
-					if (existingPrice != null) {
-						// UPDATE: 기존 엔티티의 필드 업데이트 (ID 유지)
-						existingPrice.setClosePrice(data.getClpr());
-						existingPrice.setOpenPrice(data.getMkp());
-						existingPrice.setHighPrice(data.getHipr());
-						existingPrice.setLowPrice(data.getLopr());
-						existingPrice.setTradeQuantity(data.getTrqu() != null ? data.getTrqu().intValue() : null);
-						existingPrice.setTradeAmount(data.getTrPrc());
-						existingPrice.setIssuedCount(data.getLstgStCnt());
-
-						allPricesToSave.add(existingPrice);
-						updateCount++;
-					} else {
-						// INSERT: 새 엔티티 생성 (ID null)
-						StockPrice newPrice = StockPrice.builder()
-							.stock(stock)
-							.baseDate(baseDate)
-							.closePrice(data.getClpr())
-							.openPrice(data.getMkp())
-							.highPrice(data.getHipr())
-							.lowPrice(data.getLopr())
-							.tradeQuantity(data.getTrqu() != null ? data.getTrqu().intValue() : null)
-							.tradeAmount(data.getTrPrc())
-							.issuedCount(data.getLstgStCnt())
-							.build();
-
-						allPricesToSave.add(newPrice);
-						insertCount++;
+					// 중복 체크 - 이미 존재하면 SKIP
+					if (existingDates.contains(baseDate)) {
+						skippedCount++;
+						continue;
 					}
+
+					// 신규 데이터만 INSERT
+					StockPrice newPrice = StockPrice.builder()
+						.stock(stock)
+						.baseDate(baseDate)
+						.closePrice(data.getClpr())
+						.openPrice(data.getMkp())
+						.highPrice(data.getHipr())
+						.lowPrice(data.getLopr())
+						.tradeQuantity(data.getTrqu() != null ? data.getTrqu().intValue() : null)
+						.tradeAmount(data.getTrPrc())
+						.issuedCount(data.getLstgStCnt())
+						.build();
+
+					allPricesToSave.add(newPrice);
 
 				} catch (Exception e) {
 					log.error("Error processing stock price for {}: {}", isinCode, e.getMessage());
@@ -148,10 +166,10 @@ public class StockService {
 			}
 		}
 
-		// 5. 모든 StockPrice bulk save (JPA가 자동으로 INSERT/UPDATE 구분) - 1번의 쿼리
+		// 5. 신규 StockPrice bulk insert
 		if (!allPricesToSave.isEmpty()) {
-			log.info("Bulk saving {} stock prices ({} inserts, {} updates)",
-				allPricesToSave.size(), insertCount, updateCount);
+			log.info("Bulk inserting {} stock prices ({} skipped)",
+				allPricesToSave.size(), skippedCount);
 			stockPriceRepository.saveAll(allPricesToSave);
 			stockPriceRepository.flush();
 		}

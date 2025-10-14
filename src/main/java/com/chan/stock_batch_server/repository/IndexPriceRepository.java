@@ -14,4 +14,6 @@ public interface IndexPriceRepository extends JpaRepository<IndexPrice, Integer>
 	boolean existsByIndexInfoAndBaseDate(IndexInfo indexInfo, LocalDate baseDate);
 
 	List<IndexPrice> findByIndexInfoId(Integer indexInfoId);
+
+	List<IndexPrice> findByBaseDateBetween(LocalDate startDate, LocalDate endDate);
 }
