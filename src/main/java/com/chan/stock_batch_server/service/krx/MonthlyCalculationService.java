@@ -4,7 +4,6 @@ import java.time.LocalDate;
 import java.time.YearMonth;
 import java.util.ArrayList;
 import java.util.Comparator;
-import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -113,20 +112,14 @@ public class MonthlyCalculationService {
 				)
 			));
 
-		// 6. Calculate in memory
-		List<CalcStockPrice> newCalcs = new ArrayList<>();
-		int calculatedCount = 0;
-		int skippedCount = 0;
+		// 6. Calculate in memory with UPSERT
+		List<CalcStockPrice> allCalcsToSave = new ArrayList<>();
+		int insertCount = 0;
+		int updateCount = 0;
 
 		for (Stock stock : stocks) {
 			try {
 				String key = stock.getId() + "_" + endDate;
-
-				// Check if already calculated (HashMap lookup, no DB!)
-				if (existingCalcMap.containsKey(key)) {
-					skippedCount++;
-					continue;
-				}
 
 				// Get prices for this stock from HashMap (no DB!)
 				List<StockPrice> stockPrices = pricesByStock.getOrDefault(stock.getId(), new ArrayList<>());
@@ -151,32 +144,44 @@ public class MonthlyCalculationService {
 				// Calculate monthly rate of return (from HashMap, no DB!)
 				Float monthlyRor = calculateStockMonthlyRor(stock, endDate, closePrice, calcsByStock);
 
-				// Save calculated price
-				CalcStockPrice calcPrice = CalcStockPrice.builder()
-					.stock(stock)
-					.baseDate(endDate)
-					.price(closePrice.floatValue())
-					.monthlyRor(monthlyRor)
-					.build();
+				CalcStockPrice existingCalc = existingCalcMap.get(key);
 
-				newCalcs.add(calcPrice);
-				calculatedCount++;
+				if (existingCalc != null) {
+					// UPDATE: 기존 엔티티의 필드 업데이트 (ID 유지)
+					existingCalc.setPrice(closePrice.floatValue());
+					existingCalc.setMonthlyRor(monthlyRor);
+
+					allCalcsToSave.add(existingCalc);
+					updateCount++;
+				} else {
+					// INSERT: 새 엔티티 생성 (ID null)
+					CalcStockPrice newCalc = CalcStockPrice.builder()
+						.stock(stock)
+						.baseDate(endDate)
+						.price(closePrice.floatValue())
+						.monthlyRor(monthlyRor)
+						.build();
+
+					allCalcsToSave.add(newCalc);
+					insertCount++;
+				}
 
 			} catch (Exception e) {
 				log.error("Error calculating monthly price for stock {}: {}", stock.getIsinCode(), e.getMessage());
 			}
 		}
 
-		// 7. Bulk insert all new calculations (1 query)
-		if (!newCalcs.isEmpty()) {
-			log.info("Bulk inserting {} new stock calculations", newCalcs.size());
-			calcStockPriceRepository.saveAll(newCalcs);
+		// 7. Bulk save all calculations (INSERT/UPDATE) - 1 query
+		if (!allCalcsToSave.isEmpty()) {
+			log.info("Bulk saving {} stock calculations ({} inserts, {} updates)",
+				allCalcsToSave.size(), insertCount, updateCount);
+			calcStockPriceRepository.saveAll(allCalcsToSave);
 			calcStockPriceRepository.flush();
 		}
 
 		long stepEnd = System.currentTimeMillis();
-		log.info("Stock calculation complete: {} calculated, {} skipped in {}ms",
-			calculatedCount, skippedCount, (stepEnd - stepStart));
+		log.info("Stock calculation complete: {} total ({} inserts, {} updates) in {}ms",
+			allCalcsToSave.size(), insertCount, updateCount, (stepEnd - stepStart));
 	}
 
 	/**
@@ -230,20 +235,14 @@ public class MonthlyCalculationService {
 				)
 			));
 
-		// 6. Calculate in memory
-		List<CalcIndexPrice> newCalcs = new ArrayList<>();
-		int calculatedCount = 0;
-		int skippedCount = 0;
+		// 6. Calculate in memory with UPSERT
+		List<CalcIndexPrice> allCalcsToSave = new ArrayList<>();
+		int insertCount = 0;
+		int updateCount = 0;
 
 		for (IndexInfo indexInfo : indices) {
 			try {
 				String key = indexInfo.getId() + "_" + endDate;
-
-				// Check if already calculated (HashMap lookup, no DB!)
-				if (existingCalcMap.containsKey(key)) {
-					skippedCount++;
-					continue;
-				}
 
 				// Get prices for this index from HashMap (no DB!)
 				List<IndexPrice> indexPrices = pricesByIndex.getOrDefault(indexInfo.getId(), new ArrayList<>());
@@ -268,32 +267,44 @@ public class MonthlyCalculationService {
 				// Calculate monthly rate of return (from HashMap, no DB!)
 				Float monthlyRor = calculateIndexMonthlyRor(indexInfo, endDate, closePrice, calcsByIndex);
 
-				// Save calculated price
-				CalcIndexPrice calcPrice = CalcIndexPrice.builder()
-					.indexInfo(indexInfo)
-					.baseDate(endDate)
-					.price(closePrice)
-					.monthlyRor(monthlyRor)
-					.build();
+				CalcIndexPrice existingCalc = existingCalcMap.get(key);
 
-				newCalcs.add(calcPrice);
-				calculatedCount++;
+				if (existingCalc != null) {
+					// UPDATE: 기존 엔티티의 필드 업데이트 (ID 유지)
+					existingCalc.setPrice(closePrice);
+					existingCalc.setMonthlyRor(monthlyRor);
+
+					allCalcsToSave.add(existingCalc);
+					updateCount++;
+				} else {
+					// INSERT: 새 엔티티 생성 (ID null)
+					CalcIndexPrice newCalc = CalcIndexPrice.builder()
+						.indexInfo(indexInfo)
+						.baseDate(endDate)
+						.price(closePrice)
+						.monthlyRor(monthlyRor)
+						.build();
+
+					allCalcsToSave.add(newCalc);
+					insertCount++;
+				}
 
 			} catch (Exception e) {
 				log.error("Error calculating monthly price for index {}: {}", indexInfo.getName(), e.getMessage());
 			}
 		}
 
-		// 7. Bulk insert all new calculations (1 query)
-		if (!newCalcs.isEmpty()) {
-			log.info("Bulk inserting {} new index calculations", newCalcs.size());
-			calcIndexPriceRepository.saveAll(newCalcs);
+		// 7. Bulk save all calculations (INSERT/UPDATE) - 1 query
+		if (!allCalcsToSave.isEmpty()) {
+			log.info("Bulk saving {} index calculations ({} inserts, {} updates)",
+				allCalcsToSave.size(), insertCount, updateCount);
+			calcIndexPriceRepository.saveAll(allCalcsToSave);
 			calcIndexPriceRepository.flush();
 		}
 
 		long stepEnd = System.currentTimeMillis();
-		log.info("Index calculation complete: {} calculated, {} skipped in {}ms",
-			calculatedCount, skippedCount, (stepEnd - stepStart));
+		log.info("Index calculation complete: {} total ({} inserts, {} updates) in {}ms",
+			allCalcsToSave.size(), insertCount, updateCount, (stepEnd - stepStart));
 	}
 
 	/**

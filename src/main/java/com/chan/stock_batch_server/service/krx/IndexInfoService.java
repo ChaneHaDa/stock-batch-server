@@ -6,7 +6,6 @@ import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
-import java.util.Set;
 import java.util.stream.Collectors;
 
 import org.springframework.stereotype.Service;
@@ -31,11 +30,11 @@ public class IndexInfoService {
 	private final IndexPriceRepository indexPriceRepository;
 
 	/**
-	 * Index 데이터 저장 (Proper Bulk Processing)
+	 * Index 데이터 저장 (UPSERT 방식)
 	 * 1. 데이터를 Index별로 그룹화
 	 * 2. 모든 기존 IndexInfo를 한 번에 조회
 	 * 3. 신규 IndexInfo만 bulk insert
-	 * 4. 모든 IndexPrice를 bulk insert
+	 * 4. 모든 IndexPrice를 UPSERT (INSERT or UPDATE)
 	 */
 	@Transactional
 	public void saveIndexData(List<KRXIndexData> indexDataList) {
@@ -44,7 +43,7 @@ public class IndexInfoService {
 			return;
 		}
 
-		log.info("Starting bulk save for {} index records", indexDataList.size());
+		log.info("Starting bulk save for {} index records (UPSERT mode)", indexDataList.size());
 		long startTime = System.currentTimeMillis();
 
 		// 1. 데이터를 Index별로 그룹화
@@ -87,9 +86,22 @@ public class IndexInfoService {
 			}
 		}
 
-		// 5. 모든 IndexPrice 생성 및 bulk insert
-		log.info("Preparing IndexPrice data...");
+		// 5. 모든 IndexPrice를 UPSERT 처리
+		log.info("Preparing IndexPrice data for UPSERT...");
+
+		// 5-1. 기존 모든 IndexPrice 조회 (ID 포함) - 1번 쿼리
+		List<IndexPrice> allExistingPrices = indexPriceRepository.findAll();
+		Map<String, IndexPrice> existingPriceMap = allExistingPrices.stream()
+			.collect(Collectors.toMap(
+				p -> p.getIndexInfo().getId() + "_" + p.getBaseDate(),
+				p -> p
+			));
+		log.info("Loaded {} existing index prices from DB", existingPriceMap.size());
+
+		// 5-2. INSERT/UPDATE 대상 준비
 		List<IndexPrice> allPricesToSave = new ArrayList<>();
+		int insertCount = 0;
+		int updateCount = 0;
 
 		for (Map.Entry<String, List<KRXIndexData>> entry : groupedData.entrySet()) {
 			IndexInfo indexInfo = existingIndexMap.get(entry.getKey());
@@ -99,19 +111,11 @@ public class IndexInfoService {
 				continue;
 			}
 
-			// Index의 기존 가격 데이터 조회 (각 Index당 1번)
-			Set<LocalDate> existingDates = indexPriceRepository
-				.findByIndexInfoId(indexInfo.getId())
-				.stream()
-				.map(IndexPrice::getBaseDate)
-				.collect(Collectors.toSet());
-
 			// Deduplicate input data by baseDate (keep first occurrence)
 			Map<LocalDate, KRXIndexData> deduplicatedData = new HashMap<>();
 			for (KRXIndexData data : entry.getValue()) {
 				try {
 					LocalDate baseDate = LocalDate.parse(data.getBasDt(), DATE_FORMATTER);
-					// Only add if we haven't seen this date before
 					deduplicatedData.putIfAbsent(baseDate, data);
 				} catch (Exception e) {
 					log.error("Error parsing date for {}: {}", indexInfo.getName(), e.getMessage());
@@ -126,37 +130,51 @@ public class IndexInfoService {
 					(originalCount - deduplicatedCount), indexInfo.getName(), deduplicatedCount);
 			}
 
-			// 신규 가격 데이터만 필터링
+			// UPSERT 로직
 			for (Map.Entry<LocalDate, KRXIndexData> dataEntry : deduplicatedData.entrySet()) {
-				LocalDate baseDate = dataEntry.getKey();
-				KRXIndexData data = dataEntry.getValue();
-
-				if (existingDates.contains(baseDate)) {
-					continue; // 중복 스킵
-				}
-
 				try {
-					IndexPrice price = IndexPrice.builder()
-						.indexInfo(indexInfo)
-						.baseDate(baseDate)
-							.closePrice(data.getClpr() != null ? data.getClpr().floatValue() : null)
-						.openPrice(data.getMkp() != null ? data.getMkp().floatValue() : null)
-						.highPrice(data.getHipr() != null ? data.getHipr().floatValue() : null)
-						.lowPrice(data.getLopr() != null ? data.getLopr().floatValue() : null)
-						.yearlyDiff(data.getFltRt() != null ? data.getFltRt().floatValue() : null)
-						.build();
+					LocalDate baseDate = dataEntry.getKey();
+					KRXIndexData data = dataEntry.getValue();
+					String key = indexInfo.getId() + "_" + baseDate;
 
-					allPricesToSave.add(price);
+					IndexPrice existingPrice = existingPriceMap.get(key);
+
+					if (existingPrice != null) {
+						// UPDATE: 기존 엔티티의 필드 업데이트 (ID 유지)
+						existingPrice.setClosePrice(data.getClpr() != null ? data.getClpr().floatValue() : null);
+						existingPrice.setOpenPrice(data.getMkp() != null ? data.getMkp().floatValue() : null);
+						existingPrice.setHighPrice(data.getHipr() != null ? data.getHipr().floatValue() : null);
+						existingPrice.setLowPrice(data.getLopr() != null ? data.getLopr().floatValue() : null);
+						existingPrice.setYearlyDiff(data.getFltRt() != null ? data.getFltRt().floatValue() : null);
+
+						allPricesToSave.add(existingPrice);
+						updateCount++;
+					} else {
+						// INSERT: 새 엔티티 생성 (ID null)
+						IndexPrice newPrice = IndexPrice.builder()
+							.indexInfo(indexInfo)
+							.baseDate(baseDate)
+							.closePrice(data.getClpr() != null ? data.getClpr().floatValue() : null)
+							.openPrice(data.getMkp() != null ? data.getMkp().floatValue() : null)
+							.highPrice(data.getHipr() != null ? data.getHipr().floatValue() : null)
+							.lowPrice(data.getLopr() != null ? data.getLopr().floatValue() : null)
+							.yearlyDiff(data.getFltRt() != null ? data.getFltRt().floatValue() : null)
+							.build();
+
+						allPricesToSave.add(newPrice);
+						insertCount++;
+					}
 
 				} catch (Exception e) {
-					log.error("Error building index price for {}: {}", indexInfo.getName(), e.getMessage());
+					log.error("Error processing index price for {}: {}", indexInfo.getName(), e.getMessage());
 				}
 			}
 		}
 
-		// 6. 모든 IndexPrice bulk insert (1번의 대량 쿼리)
+		// 6. 모든 IndexPrice bulk save (JPA가 자동으로 INSERT/UPDATE 구분) - 1번의 쿼리
 		if (!allPricesToSave.isEmpty()) {
-			log.info("Bulk inserting {} index prices", allPricesToSave.size());
+			log.info("Bulk saving {} index prices ({} inserts, {} updates)",
+				allPricesToSave.size(), insertCount, updateCount);
 			indexPriceRepository.saveAll(allPricesToSave);
 			indexPriceRepository.flush();
 		}
